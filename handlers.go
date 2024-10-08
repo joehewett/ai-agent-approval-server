@@ -234,3 +234,68 @@ func apiHubStatsHandler(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// Add this new handler function
+func apiAgentInfoHandler(hub *Hub, w http.ResponseWriter, r *http.Request) {
+	// Enable CORS
+	enableCors(&w)
+
+	// Handle preflight request
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Extract the agentID from the URL query parameters
+	agentID := r.URL.Query().Get("agentID")
+
+	if agentID == "" {
+		http.Error(w, "Missing agent ID", http.StatusBadRequest)
+		return
+	}
+
+	// Collect all information for the agent
+	agentInfo := hub.getAgentInfo(agentID)
+
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(agentInfo)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// Add this method to the Hub struct
+func (h *Hub) getAgentInfo(agentID string) map[string]interface{} {
+	agentInfo := make(map[string]interface{})
+
+	// Collect pending reviews for the agent
+	pendingReviews := []ReviewRequest{}
+	h.ReviewStore.RLock()
+	for _, review := range h.ReviewStore.Reviews {
+		if review.AgentID == agentID {
+			pendingReviews = append(pendingReviews, review)
+		}
+	}
+	h.ReviewStore.RUnlock()
+	agentInfo["pending_reviews"] = pendingReviews
+
+	// Collect completed reviews for the agent
+	completedReviews := []ReviewerResponse{}
+	h.ReviewStore.RLock()
+	for _, review := range h.ReviewStore.Reviews {
+		if review.AgentID == agentID && review.TaskState.Completed {
+			completedReviews = append(completedReviews, ReviewerResponse{
+				ID:         review.RequestID,
+				ToolChoice: review.ToolChoice,
+				Decision:   review.TaskState.Output.Choices[0].Message.Content,
+			})
+		}
+	}
+	h.ReviewStore.RUnlock()
+	agentInfo["completed_reviews"] = completedReviews
+
+	// Add any other relevant information you want to include
+
+	return agentInfo
+}

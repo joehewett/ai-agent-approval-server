@@ -5,6 +5,12 @@ export interface ReviewRequest {
   tool_choice: ToolChoice;
 }
 
+export interface ReviewerResponse {
+  id: string;
+  decision: string;
+  tool_choice: ToolChoice;
+}
+
 export interface TaskState {
   messages: Message[];
   tools: Tool[];

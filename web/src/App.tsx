@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ReviewRequest, ToolChoice } from './review';
+import { ReviewerResponse, ReviewRequest, ToolChoice } from './review';
 import ReviewRequestDisplay from './components/review_request';
 import HubStats from './components/hub_stats';
 import { UserIcon, BrainCircuitIcon, MessageSquareIcon, SlackIcon } from 'lucide-react';
@@ -52,7 +52,13 @@ const ApproverSelection: React.FC<{ onSelect: (approver: string) => void }> = ({
   );
 };
 
-const NavBar: React.FC<{ onHome: () => void }> = ({ onHome }) => {
+interface AgentInfo {
+  pending_reviews: ReviewRequest[];
+  completed_reviews: ReviewerResponse[];
+  // Add any other fields that the API returns
+}
+
+const NavBar: React.FC<{ onHome: () => void, onAgentInfo: () => void }> = ({ onHome, onAgentInfo }) => {
   return (
     <nav className="bg-gray-800 text-white p-4">
       <div className="container mx-auto flex justify-between items-center">
@@ -62,8 +68,54 @@ const NavBar: React.FC<{ onHome: () => void }> = ({ onHome }) => {
         >
           Approvals Interface
         </h1>
+        <button
+          className="text-sm bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded"
+          onClick={onAgentInfo}
+        >
+          View Agent Info
+        </button>
       </div>
     </nav>
+  );
+};
+
+const AgentInfoView: React.FC<{ agentInfo: AgentInfo | null }> = ({ agentInfo }) => {
+  if (!agentInfo) {
+    return <p>Loading agent information...</p>;
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h2 className="text-2xl font-bold mb-4">Agent Information</h2>
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-xl font-semibold">Pending Reviews</h3>
+          {agentInfo.pending_reviews.length === 0 ? (
+            <p>No pending reviews</p>
+          ) : (
+            <ul>
+              {agentInfo.pending_reviews.map((review) => (
+                <li key={review.request_id}>Request ID: {review.request_id}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <h3 className="text-xl font-semibold">Completed Reviews</h3>
+          {agentInfo.completed_reviews.length === 0 ? (
+            <p>No completed reviews</p>
+          ) : (
+            <ul>
+              {agentInfo.completed_reviews.map((review) => (
+                <li key={review.id}>
+                  Request ID: {review.id}, Decision: {review.decision}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -73,6 +125,8 @@ const ApprovalsInterface: React.FC = () => {
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [hubStats, setHubStats] = useState<HubStats | null>(null);
   const [selectedApprover, setSelectedApprover] = useState<string | null>(null);
+  const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
+  const [showAgentInfo, setShowAgentInfo] = useState(false);
 
   useEffect(() => {
     // Initialize WebSocket connection
@@ -127,7 +181,7 @@ const ApprovalsInterface: React.FC = () => {
   const sendResponse = (decision: string, requestId: string, reviewRequest: ReviewRequest) => {
     console.log(`Sending response for request ${requestId}: ${decision}`);
     if (socket && socket.readyState === WebSocket.OPEN) {
-      const response = {
+      const response: ReviewerResponse = {
         id: requestId,
         decision: decision,
         tool_choice: reviewRequest.tool_choice
@@ -162,14 +216,30 @@ const ApprovalsInterface: React.FC = () => {
 
   const handleGoHome = () => {
     setSelectedApprover(null);
+    setShowAgentInfo(false);
+  };
+
+  const handleAgentInfo = async () => {
+    if (selectedReviewRequest) {
+      try {
+        const response = await fetch(`http://localhost:8080/api/agent?agentID=${selectedReviewRequest.agent_id}`);
+        const data: AgentInfo = await response.json();
+        setAgentInfo(data);
+        setShowAgentInfo(true);
+      } catch (error) {
+        console.error('Error fetching agent info:', error);
+      }
+    }
   };
 
   return (
     <div className="flex flex-col min-h-screen">
-      <NavBar onHome={handleGoHome} />
+      <NavBar onHome={handleGoHome} onAgentInfo={handleAgentInfo} />
 
       <main className="flex-grow">
-        {selectedApprover === null ? (
+        {showAgentInfo ? (
+          <AgentInfoView agentInfo={agentInfo} />
+        ) : selectedApprover === null ? (
           <ApproverSelection onSelect={setSelectedApprover} />
         ) : selectedApprover !== "HumanApprover" ? (
           <div className="container mx-auto px-4 py-8">

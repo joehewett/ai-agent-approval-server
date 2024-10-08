@@ -26,6 +26,9 @@ func main() {
 	http.HandleFunc("/api/stats", func(w http.ResponseWriter, r *http.Request) {
 		apiHubStatsHandler(hub, w, r)
 	})
+	http.HandleFunc("/api/agent/info", func(w http.ResponseWriter, r *http.Request) {
+		apiAgentInfoHandler(hub, w, r)
+	})
 
 	// Serve static files
 	fs := http.FileServer(http.Dir("./static/"))
